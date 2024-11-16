@@ -127,7 +127,7 @@ En esta primera llamada voy a realizar una consulta sencilla a la tabla “bonus
 
 Desglose de consulta con dblink:
 
-FROM dblink(...):
+`FROM dblink(...)`:
 
 - Utiliza la función dblink para establecer una conexión remota a otro servidor de PostgreSQL y ejecutar una consulta en él.
 - dblink requiere dos argumentos principales:

@@ -8,7 +8,7 @@ Los enlaces que configuraremos son los siguientes:
 
 1. **Oracle** <------> **Oracle**: Enlace directo entre dos servidores Oracle.
 2. **PostgreSQL** <------> **PostgreSQL**: Enlace directo entre dos servidores PostgreSQL.
-3. **Oracle** <------> **MySQL**: Enlace bidireccional entre Oracle y MySQL utilizando Oracle Heterogeneous Services.
-4. **Oracle** <------> **PostgreSQL**: Enlace bidireccional entre Oracle y PostgreSQL también usando Heterogeneous Services.
+3. **Oracle** <------> **MySQL**: Enlace bidireccional entre Oracle y MySQL.
+4. **Oracle** <------> **PostgreSQL**: Enlace bidireccional entre Oracle y PostgreSQL.
 
 Finalmente, realizaremos una consulta que integre información de dos servidores diferentes, aplicando enlaces simultáneos, para demostrar cómo combinar datos desde distintas bases de datos en una sola operación. Esto permitirá comprender la utilidad de los enlaces de bases de datos para gestionar datos distribuidos.
