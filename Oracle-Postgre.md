@@ -227,7 +227,7 @@ El archivo debe ubicarse en la ruta `$ORACLE_HOME/hs/admin/` y seguir el formato
 pablo@oracle19c:~$ cat /opt/oracle/product/19c/dbhome_1/hs/admin/initPSQLORCL.ora
 HS_FDS_CONNECT_INFO = PSQLORCL
 HS_FDS_TRACE_LEVEL = DEBUG
-HS_FDS_SHAREABLE_NAME = /usr/lib64/psqlodbcw.so
+HS_FDS_SHAREABLE_NAME = /usr/lib/x86_64-linux-gnu/odbc/psqlodbcw.so
 HS_LANGUAGE = AMERICAN_AMERICA.WE8ISO8859P1
 set ODBCINI=/etc/odbc.ini
 ```
@@ -439,3 +439,263 @@ hora_salida
 ```
 
 ¡Y listo! ya hemos interconectado Oracle 19c con PostgreSQL.
+
+
+# PostgreSQL a Oracle 19c
+
+En esta segunda parte de la interconexión entre Oracle y Postgre, lo haremos al revés de como lo hicimos anteriormente. Para ello utilizaré las mismas máquinas donde:
+
+- Oracle: `host` --> oracle19c | `IP` --> 192.168.122.195
+
+- PostgreSQL: `host` --> servidor-postgre1 | `IP` --> 192.168.122.163 
+
+Primero vamos a instalar unos paquetes que nos servirán tanto para establecer la conexión con Oracle como a la hora de compilar el Makefile que necesitaremos más adelante:
+```
+pablo@servidor-postgre1:~$ sudo apt install git build-essential libaio1 postgresql-server-dev-all -y
+```
+Una vez instalados los paquetes, vamos a descargarnos a través de wget los paquetes de Oracle Instant Client:
+```
+pablo@servidor-postgre1:~$ sudo su - postgres 
+postgres@servidor-postgre1:~$ wget https://download.oracle.com/otn_software/linux/instantclient/211000/instantclient-basic-linux.x64-21.1.0.0.0.zip
+--2024-11-17 16:22:27--  https://download.oracle.com/otn_software/linux/instantclient/211000/instantclient-basic-linux.x64-21.1.0.0.0.zip
+Resolviendo download.oracle.com (download.oracle.com)... 2.21.140.94
+Conectando con download.oracle.com (download.oracle.com)[2.21.140.94]:443... conectado.
+Petición HTTP enviada, esperando respuesta... 200 OK
+Longitud: 79250994 (76M) [application/zip]
+Grabando a: «instantclient-basic-linux.x64-21.1.0.0.0.zip»
+
+instantclient-basic-linux.x64-21.1.0.0.0.zi 100%[========================================================================================>]  75,58M  79,7MB/s    en 0,9s    
+
+2024-11-17 16:22:28 (79,7 MB/s) - «instantclient-basic-linux.x64-21.1.0.0.0.zip» guardado [79250994/79250994]
+
+postgres@servidor-postgre1:~$ wget https://download.oracle.com/otn_software/linux/instantclient/211000/instantclient-sdk-linux.x64-21.1.0.0.0.zip
+--2024-11-17 16:22:53--  https://download.oracle.com/otn_software/linux/instantclient/211000/instantclient-sdk-linux.x64-21.1.0.0.0.zip
+Resolviendo download.oracle.com (download.oracle.com)... 2.21.140.94
+Conectando con download.oracle.com (download.oracle.com)[2.21.140.94]:443... conectado.
+Petición HTTP enviada, esperando respuesta... 200 OK
+Longitud: 998327 (975K) [application/zip]
+Grabando a: «instantclient-sdk-linux.x64-21.1.0.0.0.zip»
+
+instantclient-sdk-linux.x64-21.1.0.0.0.zip  100%[========================================================================================>] 974,93K  --.-KB/s    en 0,06s   
+
+2024-11-17 16:22:54 (15,0 MB/s) - «instantclient-sdk-linux.x64-21.1.0.0.0.zip» guardado [998327/998327]
+
+postgres@servidor-postgre1:~$ wget https://download.oracle.com/otn_software/linux/instantclient/211000/instantclient-sqlplus-linux.x64-21.1.0.0.0.zip
+--2024-11-17 16:23:04--  https://download.oracle.com/otn_software/linux/instantclient/211000/instantclient-sqlplus-linux.x64-21.1.0.0.0.zip
+Resolviendo download.oracle.com (download.oracle.com)... 2.21.140.94
+Conectando con download.oracle.com (download.oracle.com)[2.21.140.94]:443... conectado.
+Petición HTTP enviada, esperando respuesta... 200 OK
+Longitud: 936169 (914K) [application/zip]
+Grabando a: «instantclient-sqlplus-linux.x64-21.1.0.0.0.zip»
+
+instantclient-sqlplus-linux.x64-21.1.0.0.0. 100%[========================================================================================>] 914,23K  --.-KB/s    en 0,05s   
+
+2024-11-17 16:23:04 (17,1 MB/s) - «instantclient-sqlplus-linux.x64-21.1.0.0.0.zip» guardado [936169/936169]
+```
+
+⚠️ Importante: nos descargamos los paquetes .zip con el usuario postgres
+
+Bien, ya tenemos la descarga hecha, para listar los paquetes:
+```
+postgres@servidor-postgre1:~$ ls -l
+total 79296
+drwxr-xr-x 3 postgres postgres     4096 oct  9 18:45 15
+-rw-r--r-- 1 postgres postgres 79250994 dic  1  2020 instantclient-basic-linux.x64-21.1.0.0.0.zip
+-rw-r--r-- 1 postgres postgres   998327 dic  1  2020 instantclient-sdk-linux.x64-21.1.0.0.0.zip
+-rw-r--r-- 1 postgres postgres   936169 dic  1  2020 instantclient-sqlplus-linux.x64-21.1.0.0.0.zip
+```
+Los descomprimimos:
+```
+postgres@servidor-postgre1:~$ unzip instantclient-basic-linux.x64-21.1.0.0.0.zip
+postgres@servidor-postgre1:~$ unzip instantclient-sdk-linux.x64-21.1.0.0.0.zip
+postgres@servidor-postgre1:~$ unzip instantclient-sqlplus-linux.x64-21.1.0.0.0.zip
+```
+
+En Linux, los binarios y comandos ejecutables se buscan en las rutas especificadas por la variable de entorno `$PATH`. Si un binario no está en una de estas rutas, no podrá ejecutarse simplemente escribiendo su nombre en la terminal.
+
+En este caso, el directorio donde se han descomprimido los binarios (`/home/postgres/instantclient_21_1`) no está incluido en la variable `$PATH`, por lo que, para usar los binarios como sqlplus, tendríamos que proporcionar la ruta completa cada vez. Esto es incómodo y poco práctico.
+
+Por lo tanto, agregamos las siguientes líneas al archivo de configuración `~/.bashrc`:
+```
+echo 'export ORACLE_HOME=/var/lib/postgresql/instantclient_21_1' >> ~/.bashrc
+echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ORACLE_HOME' >> ~/.bashrc
+echo 'export PATH=$PATH:$ORACLE_HOME' >> ~/.bashrc
+```
+Luego, cargamos el archivo de configuración para aplicar los cambios:
+```
+source ~/.bashrc
+```
+Comprobamos que se han hecho correctamente las variables de entorno:
+```
+postgres@servidor-postgre1:~$ which sqlplus 
+/var/lib/postgresql/instantclient_21_1/sqlplus
+```
+
+Para comprobar el correcto funcionamiento, vamos a realizar una conexión remota, al igual que haríamos en una situación real:
+```
+postgres@servidor-postgre1:~$ sqlplus pablolink/password@192.168.122.195:1521/ORCLCDB
+
+SQL*Plus: Release 21.0.0.0.0 - Production on Sun Nov 17 17:44:30 2024
+Version 21.1.0.0.0
+
+Copyright (c) 1982, 2020, Oracle.  All rights reserved.
+
+Hora de Ultima Conexion Correcta: Dom Nov 17 2024 17:43:48 +01:00
+
+Conectado a:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.3.0.0.0
+
+SQL>
+```
+Y como vemos funciona correctamente.
+
+Ahora, voy a clonar el siguiente repositorio [Laurenz](https://github.com/laurenz/oracle_fdw). En donde se encuentra el código fuente necesario para la compilación de **oracle_fdw**.
+```
+postgres@servidor-postgre1:~$ git clone https://github.com/laurenz/oracle_fdw.git
+Clonando en 'oracle_fdw'...
+remote: Enumerating objects: 2870, done.
+remote: Counting objects: 100% (968/968), done.
+remote: Compressing objects: 100% (95/95), done.
+remote: Total 2870 (delta 906), reused 917 (delta 873), pack-reused 1902 (from 1)
+Recibiendo objetos: 100% (2870/2870), 1.54 MiB | 6.67 MiB/s, listo.
+Resolviendo deltas: 100% (2019/2019), listo.
+```
+
+Verificamos que tenemos el contenido y que la clonación es válida:
+```
+postgres@servidor-postgre1:~$ ls -l
+total 16
+drwxr-xr-x 3 postgres postgres 4096 oct  9 18:45 15
+drwxr-xr-x 4 postgres postgres 4096 nov 17 16:29 instantclient_21_1
+drwxr-xr-x 6 postgres postgres 4096 nov 17 17:54 oracle_fdw
+drwxr-xr-x 3 postgres postgres 4096 nov 17 16:37 oradiag_postgres
+```
+
+Ahora nos moveremos al directorio que se ha creado, y listamos su contenido:
+```
+postgres@servidor-postgre1:~$ cd oracle_fdw/
+postgres@servidor-postgre1:~/oracle_fdw$ ls -l
+total 500
+-rw-r--r-- 1 postgres postgres  28436 nov 17 17:54 CHANGELOG
+drwxr-xr-x 2 postgres postgres   4096 nov 17 17:54 expected
+-rw-r--r-- 1 postgres postgres   1059 nov 17 17:54 LICENSE
+-rw-r--r-- 1 postgres postgres   1475 nov 17 17:54 Makefile
+drwxr-xr-x 2 postgres postgres   4096 nov 17 17:54 msvc
+-rw-r--r-- 1 postgres postgres    231 nov 17 17:54 oracle_fdw--1.0--1.1.sql
+-rw-r--r-- 1 postgres postgres    240 nov 17 17:54 oracle_fdw--1.1--1.2.sql
+-rw-r--r-- 1 postgres postgres   1244 nov 17 17:54 oracle_fdw--1.2.sql
+-rw-r--r-- 1 postgres postgres 229598 nov 17 17:54 oracle_fdw.c
+-rw-r--r-- 1 postgres postgres    133 nov 17 17:54 oracle_fdw.control
+-rw-r--r-- 1 postgres postgres   9156 nov 17 17:54 oracle_fdw.h
+-rw-r--r-- 1 postgres postgres  44511 nov 17 17:54 oracle_gis.c
+-rw-r--r-- 1 postgres postgres 104953 nov 17 17:54 oracle_utils.c
+lrwxrwxrwx 1 postgres postgres     17 nov 17 17:54 README.md -> README.oracle_fdw
+-rw-r--r-- 1 postgres postgres  44112 nov 17 17:54 README.oracle_fdw
+drwxr-xr-x 2 postgres postgres   4096 nov 17 17:54 sql
+-rw-r--r-- 1 postgres postgres    948 nov 17 17:54 TODO
+```
+
+Por tanto, para llevar a cabo dicha compilación e instalar el resultado en los correspondientes directorios de la máquina, ejecutaremos los comandos:
+```
+postgres@servidor-postgre1:~/oracle_fdw$ make
+gcc -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -g -g -O2 -fstack-protector-strong -Wformat -Werror=format-security -fno-omit-frame-pointer -fPIC -I"/var/lib/postgresql/instantclient_21_1/sdk/include" -I"/var/lib/postgresql/instantclient_21_1/oci/include" -I"/var/lib/postgresql/instantclient_21_1/rdbms/public" -I"/var/lib/postgresql/instantclient_21_1/"  -I. -I./ -I/usr/include/postgresql/15/server -I/usr/include/postgresql/internal  -Wdate-time -D_FORTIFY_SOURCE=2 -D_GNU_SOURCE -I/usr/include/libxml2   -c -o oracle_fdw.o oracle_fdw.c
+gcc -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -g -g -O2 -fstack-protector-strong -Wformat -Werror=format-security -fno-omit-frame-pointer -fPIC -I"/var/lib/postgresql/instantclient_21_1/sdk/include" -I"/var/lib/postgresql/instantclient_21_1/oci/include" -I"/var/lib/postgresql/instantclient_21_1/rdbms/public" -I"/var/lib/postgresql/instantclient_21_1/"  -I. -I./ -I/usr/include/postgresql/15/server -I/usr/include/postgresql/internal  -Wdate-time -D_FORTIFY_SOURCE=2 -D_GNU_SOURCE -I/usr/include/libxml2   -c -o oracle_utils.o oracle_utils.c
+gcc -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -g -g -O2 -fstack-protector-strong -Wformat -Werror=format-security -fno-omit-frame-pointer -fPIC -I"/var/lib/postgresql/instantclient_21_1/sdk/include" -I"/var/lib/postgresql/instantclient_21_1/oci/include" -I"/var/lib/postgresql/instantclient_21_1/rdbms/public" -I"/var/lib/postgresql/instantclient_21_1/"  -I. -I./ -I/usr/include/postgresql/15/server -I/usr/include/postgresql/internal  -Wdate-time -D_FORTIFY_SOURCE=2 -D_GNU_SOURCE -I/usr/include/libxml2   -c -o oracle_gis.o oracle_gis.c
+gcc -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Werror=vla -Wendif-labels -Wmissing-format-attribute -Wimplicit-fallthrough=3 -Wcast-function-type -Wformat-security -fno-strict-aliasing -fwrapv -fexcess-precision=standard -Wno-format-truncation -Wno-stringop-truncation -g -g -O2 -fstack-protector-strong -Wformat -Werror=format-security -fno-omit-frame-pointer -fPIC -shared -o oracle_fdw.so oracle_fdw.o oracle_utils.o oracle_gis.o -L/usr/lib/x86_64-linux-gnu  -Wl,-z,relro -Wl,-z,now -L/usr/lib/llvm-14/lib  -Wl,--as-needed  -L"/var/lib/postgresql/instantclient_21_1/" -L"/var/lib/postgresql/instantclient_21_1/bin" -L"/var/lib/postgresql/instantclient_21_1/lib" -L"/var/lib/postgresql/instantclient_21_1/lib/amd64"  -lclntsh 
+```
+```
+postgres@servidor-postgre1:~/oracle_fdw$ sudo make install
+/bin/mkdir -p '/usr/lib/postgresql/15/lib'
+/bin/mkdir -p '/usr/share/postgresql/15/extension'
+/bin/mkdir -p '/usr/share/postgresql/15/extension'
+/bin/mkdir -p '/usr/share/doc/postgresql-doc-15/extension'
+/usr/bin/install -c -m 755  oracle_fdw.so '/usr/lib/postgresql/15/lib/oracle_fdw.so'
+/usr/bin/install -c -m 644 .//oracle_fdw.control '/usr/share/postgresql/15/extension/'
+/usr/bin/install -c -m 644 .//oracle_fdw--1.2.sql .//oracle_fdw--1.0--1.1.sql .//oracle_fdw--1.1--1.2.sql  '/usr/share/postgresql/15/extension/'
+/usr/bin/install -c -m 644 .//README.oracle_fdw '/usr/share/doc/postgresql-doc-15/extension/'
+```
+
+Después de que la compilación se haya completado con éxito y la extensión haya sido instalada en los directorios locales de PostgreSQL, ya está lista para utilizarse. No obstante, será necesario especificar manualmente la ruta a dichas bibliotecas. Para ello: 
+```
+postgres@servidor-postgre1:~/oracle_fdw$ echo '/home/postgres/instantclient\_21\_1' | sudo tee /etc/ld.so.conf.d/oracle.conf
+/home/postgres/instantclient\_21\_1
+```
+
+Y por último, tendremos que generar los enlaces necesarios y cargar en memoria las nuevas librerías compartidas:
+```
+postgres@servidor-postgre1:~/oracle_fdw$ sudo ldconfig
+```
+
+⚠️ IMPORTANTE: la ruta que había puesto no era correcta, por lo que la he modificado para que apunte a la verdadera ruta:
+```
+postgres@servidor-postgre1:~$ cat /etc/ld.so.conf.d/oracle.conf
+/var/lib/postgresql/instantclient_21_1
+postgres@servidor-postgre1:~$ pwd
+/var/lib/postgresql
+```
+
+Una vez ya estamos seguros de que está todo correcto, 
+```
+postgres@servidor-postgre1:~$ psql -d prueba
+psql (15.9 (Debian 15.9-0+deb12u1))
+Digite «help» para obtener ayuda.
+
+prueba=# CREATE EXTENSION oracle_fdw;
+CREATE EXTENSION
+```
+Verificamos que la extensión `oracle_fdw` esté correctamente creada:
+```
+prueba=# \dx
+                     Listado de extensiones instaladas
+   Nombre   | Versión |  Esquema   |              Descripción               
+------------+---------+------------+----------------------------------------
+ oracle_fdw | 1.2     | public     | foreign data wrapper for Oracle access
+ plpgsql    | 1.0     | pg_catalog | PL/pgSQL procedural language
+(2 filas)
+```
+
+A continuación, crearé un esquema llamado `oracle` en PostgreSQL para almacenar las tablas importadas desde Oracle:
+```
+prueba=# CREATE SCHEMA oracle;
+CREATE SCHEMA
+```
+Luego, configuraré el servidor Oracle en PostgreSQL utilizando la extensión `oracle_fdw`. Este paso permite conectar PostgreSQL con la base de datos Oracle usando los parámetros de conexión adecuados (en este caso, la IP del servidor Oracle y el nombre del contenedor ORCLCDB):
+```
+prueba=# CREATE SERVER oracle FOREIGN DATA WRAPPER oracle_fdw OPTIONS (dbserver '//192.168.122.195/ORCLCDB');
+CREATE SERVER
+```
+
+El siguiente paso será crear un mapeo de usuario entre PostgreSQL y Oracle, proporcionando las credenciales necesarias para acceder a Oracle (usuario y contraseña):
+```
+prueba=# CREATE USER MAPPING FOR pablo SERVER oracle OPTIONS (user 'pablolink', password 'password');
+CREATE USER MAPPING
+```
+
+Le otorgamos privilegios a `pablo` sobre el esquema `oracle` y sobre el servidor externo oracle para asegurar que el usuario tenga acceso a las tablas importadas desde Oracle:
+```
+prueba=# GRANT ALL PRIVILEGES ON SCHEMA oracle TO pablo;
+GRANT
+prueba=# GRANT ALL PRIVILEGES ON FOREIGN SERVER oracle TO pablo;
+GRANT
+```
+
+Por último, importamos el esquema de Oracle a PostgreSQL, para ello utilizaré el comando IMPORT FOREIGN SCHEMA. Esto permite que las tablas de Oracle estén disponibles en PostgreSQL bajo el esquema previamente creado (oracle):
+```
+prueba=> IMPORT FOREIGN SCHEMA "PABLOLINK" FROM SERVER oracle INTO oracle;
+IMPORT FOREIGN SCHEMA
+```
+
+Ya solo nos queda comprobar que todo ha salido bien, para ello hacemos una consulta a la tabla `dept` del servidor Oracle:
+``` 
+prueba=> SELECT * FROM oracle.dept;
+ deptno |   dname    |   loc    
+--------+------------+----------
+     10 | ACCOUNTING | NEW YORK
+     20 | RESEARCH   | DALLAS
+     30 | SALES      | CHICAGO
+     40 | OPERATIONS | BOSTON
+(4 filas)
+```
+
+Y como vemos ha funcionado perfectamente.
