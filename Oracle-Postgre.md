@@ -111,36 +111,12 @@ Donde:
 
 - **Database**: Especificamos el nombre de la base de datos remota a la que deseamos conectarnos. En este caso, `prueba`.
 
+
+Hago aquí un pequeño inciso para mostrar la creación del usuario y de las tablas en PostgreSQL.
+
+El usuario:
+
 ```
-pablo@oracle19c:~$ isql PSQLORCL
-+---------------------------------------+
-| Connected!                            |
-|                                       |
-| sql-statement                         |
-| help [tablename]                      |
-| echo [string]                         |
-| quit                                  |
-|                                       |
-+---------------------------------------+
-SQL> SELECT * FROM empleados;
-+------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------+-------------+-------------------+-------+
-| empleado_id| nombre_completo                                                                                                                                       | puesto                                                                                              | salario     | fecha_contratacion| activo|
-+------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------+-------------+-------------------+-------+
-| 1          | Laura Martínez                                                                                                                                       | Desarrolladora                                                                                      | 50000,00    | 2020-05-15        | 1     |
-| 2          | Pedro Gutiérrez                                                                                                                                      | Analista de Datos                                                                                   | 45000,00    | 2021-03-01        | 1     |
-| 3          | Lucía Fernández                                                                                                                                     | Gerente de Proyectos                                                                                | 60000,00    | 2019-07-10        | 1     |
-| 4          | Miguel Torres                                                                                                                                         | Especialista en Marketing                                                                           | 40000,00    | 2022-01-20        | 1     |
-| 5          | Carla López                                                                                                                                          | Diseñadora Gráfica                                                                                | 35000,00    | 2021-08-05        | 1     |
-+------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------+-------------+-------------------+-------+
-SQLRowCount returns 5
-5 rows fetched
-```
-
-
-
-
-EXPLICAR ESTO. Básicamente son las tablas
-
 postgres@servidor-postgre1:~$ psql
 psql (15.8 (Debian 15.8-0+deb12u1))
 Digite «help» para obtener ayuda.
@@ -151,8 +127,12 @@ postgres=# CREATE DATABASE prueba OWNER pablo;
 CREATE DATABASE
 postgres=# GRANT ALL PRIVILEGES ON DATABASE prueba TO pablo;
 GRANT
+postgres=# exit
+```
 
+Y las tablas con sus respectivos datos:
 
+```
 postgres@servidor-postgre1:~$ psql -h localhost -U pablo -d prueba
 Contraseña para usuario pablo: 
 psql (15.8 (Debian 15.8-0+deb12u1))
@@ -205,3 +185,257 @@ prueba=> INSERT INTO asistencias (empleado_id, fecha, hora_entrada, hora_salida)
 (4, '2024-11-10', '08:15:00', '17:15:00'),
 (5, '2024-11-10', '08:45:00', '16:45:00');
 INSERT 0 5
+```
+
+Ahora, con el comando isql PSQLORCL, voy a conectarme a la base de datos PostgreSQL mediante ODBC.
+
+```
+pablo@oracle19c:~$ isql PSQLORCL
++---------------------------------------+
+| Connected!                            |
+|                                       |
+| sql-statement                         |
+| help [tablename]                      |
+| echo [string]                         |
+| quit                                  |
+|                                       |
++---------------------------------------+
+```
+
+ Una vez establecida la conexión con éxito, podemos ejecutar una consulta para ver los datos de la tabla `empleados` por ejemplo. Con esto, demostramos que la configuración del DSN PSQLORCL en los archivos `odbc.ini` y `odbcinst.ini` fue correcta, permitiendo la comunicación entre Oracle y PostgreSQL a través del driver ODBC.
+
+```
+SQL> SELECT * FROM empleados;
++------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------+-------------+-------------------+-------+
+| empleado_id| nombre_completo                                                                                                                                       | puesto                                                                                              | salario     | fecha_contratacion| activo|
++------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------+-------------+-------------------+-------+
+| 1          | Laura Martínez                                                                                                                                       | Desarrolladora                                                                                      | 50000,00    | 2020-05-15        | 1     |
+| 2          | Pedro Gutiérrez                                                                                                                                      | Analista de Datos                                                                                   | 45000,00    | 2021-03-01        | 1     |
+| 3          | Lucía Fernández                                                                                                                                     | Gerente de Proyectos                                                                                | 60000,00    | 2019-07-10        | 1     |
+| 4          | Miguel Torres                                                                                                                                         | Especialista en Marketing                                                                           | 40000,00    | 2022-01-20        | 1     |
+| 5          | Carla López                                                                                                                                          | Diseñadora Gráfica                                                                                | 35000,00    | 2021-08-05        | 1     |
++------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------+-------------+-------------------+-------+
+SQLRowCount returns 5
+5 rows fetched
+```
+
+Como se mencionó anteriormente, aunque el driver ya está configurado, Oracle aún no está preparado para utilizarlo. El siguiente paso consiste en crear un archivo de configuración para habilitar los *Heterogeneous Services*. Este archivo contiene parámetros necesarios para que Oracle pueda interactuar correctamente con el driver configurado.
+
+El archivo debe ubicarse en la ruta `$ORACLE_HOME/hs/admin/` y seguir el formato de nombre `init[DSN].ora`. En este caso, dado que el DSN es `PSQLORCL`, el archivo deberá llamarse `initPSQLORCL.ora`. De forma que el nuevo fichero quedaría así:
+
+```
+pablo@oracle19c:~$ cat /opt/oracle/product/19c/dbhome_1/hs/admin/initPSQLORCL.ora
+HS_FDS_CONNECT_INFO = PSQLORCL
+HS_FDS_TRACE_LEVEL = DEBUG
+HS_FDS_SHAREABLE_NAME = /usr/lib64/psqlodbcw.so
+HS_LANGUAGE = AMERICAN_AMERICA.WE8ISO8859P1
+set ODBCINI=/etc/odbc.ini
+```
+
+La siguiente etapa de configuración implica modificar el archivo `listener.ora` para incluir la definición del listener, necesario para que Oracle pueda comunicarse con el servicio heterogéneo configurado previamente. Este archivo se encuentra en la ruta `$ORACLE_HOME/network/admin/`. Por lo tanto:
+
+**Definición del Listener:**
+   ```plaintext
+pablo@oracle19c:~$ cat /opt/oracle/product/19c/dbhome_1/network/admin/listener.ora
+# listener.ora Network Configuration File: /opt/oracle/product/19c/dbhome_1/network/admin/listener.ora
+# Generated by Oracle configuration tools.
+
+LISTENER =
+  (DESCRIPTION_LIST =
+    (DESCRIPTION =
+      (ADDRESS = (PROTOCOL = TCP)(HOST = oracle19c)(PORT = 1521))
+      (ADDRESS = (PROTOCOL = IPC)(KEY = EXTPROC1521))
+    )
+  )
+   ```
+   - `LISTENER`: Es el nombre del listener.
+   - `DESCRIPTION_LIST` y `DESCRIPTION`: Estas secciones configuran las direcciones que el listener utilizará.
+   - `ADDRESS` con `PROTOCOL = TCP`: Define la dirección TCP/IP del listener. Aquí se especifica el `HOST` con la dirección IP o con el nombre de host, yo pondré "oracle19c" que es mi nombre de host. Y por último, el `PORT` como `1521`.
+   - `ADDRESS` con `PROTOCOL = IPC`: Configura una dirección de comunicación interna mediante el protocolo IPC (Interprocess Communication), con una clave identificadora `EXTPROC1521`.
+
+**Definición del SID (Service Identifier):**
+   ```plaintext
+SID_LIST_LISTENER=
+  (SID_LIST=
+      (SID_DESC=
+         (SID_NAME=PSQLORCL)
+         (ORACLE_HOME=/opt/oracle/product/19c/dbhome_1)
+         (PROGRAM=dg4odbc)
+      )
+  )
+   ```
+   - `SID_LIST_LISTENER`: Asocia un identificador de servicio (SID) con el listener.
+   - `SID_DESC`: Describe el servicio a asociar.
+   - `SID_NAME = PSQLORCL`: Define el nombre del SID que usará Oracle para referirse a este servicio heterogéneo.
+   - `ORACLE_HOME`: Especifica el directorio base de Oracle, en este caso `/opt/oracle/product/19c/dbhome_1`.
+   - `PROGRAM = dg4odbc`: Indica que se utilizará el programa `dg4odbc` (Database Gateway for ODBC), encargado de la comunicación con bases de datos externas mediante ODBC.
+
+Esta configuración asegura que el listener de Oracle pueda reconocer y gestionar solicitudes hacia el servicio heterogéneo asociado al DSN configurado previamente (`PSQLORCL`).
+
+El siguiente paso es modificar el fichero `tnsnames.ora`. Este archivo es un componente clave de la configuración de redes en Oracle, utilizado para definir alias que simplifican el acceso a bases de datos. Este archivo se encuentra en la ruta `$ORACLE_HOME/network/admin/` y permite a Oracle identificar y conectarse con servicios locales o remotos.
+
+```
+pablo@oracle19c:~$ cat /opt/oracle/product/19c/dbhome_1/network/admin/tnsnames.ora
+# tnsnames.ora Network Configuration File: /opt/oracle/product/19c/dbhome_1/network/admin/tnsnames.ora
+# Generated by Oracle configuration tools.
+
+ORCLCDB =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = oracle)(PORT = 1521))
+    (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = ORCLCDB)
+    )
+  )
+
+LISTENER_ORCLCDB =
+  (ADDRESS = (PROTOCOL = TCP)(HOST = oracle)(PORT = 1521))
+
+# Esto es lo que tenemos que añadir, lo demás viene por defecto.
+PSQLORCL  =
+  (DESCRIPTION=
+    (ADDRESS=(PROTOCOL=tcp)(HOST=localhost)(PORT=1521))
+    (CONNECT_DATA=(SID=PSQLORCL))
+    (HS=OK)
+  )
+
+```
+
+Ya tenemos todo configurado, solo nos queda reiniciar el servicio listener desde el usuario `oracle`:
+
+```
+pablo@oracle19c:~$ sudo su - oracle
+oracle@oracle19c:~$ lsnrctl stop
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 17-NOV-2024 12:47:13
+
+Copyright (c) 1991, 2019, Oracle.  All rights reserved.
+
+Connecting to (DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=oracle19c)(PORT=1521)))
+TNS-12541: TNS:no listener
+ TNS-12560: TNS:protocol adapter error
+  TNS-00511: No listener
+   Linux Error: 111: Connection refused
+Connecting to (DESCRIPTION=(ADDRESS=(PROTOCOL=IPC)(KEY=EXTPROC1521)))
+TNS-12541: TNS:no listener
+ TNS-12560: TNS:protocol adapter error
+  TNS-00511: No listener
+   Linux Error: 111: Connection refused
+oracle@oracle19c:~$ lsnrctl start
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 17-NOV-2024 12:47:21
+
+Copyright (c) 1991, 2019, Oracle.  All rights reserved.
+
+Starting /opt/oracle/product/19c/dbhome_1/bin/tnslsnr: please wait...
+
+TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+System parameter file is /opt/oracle/product/19c/dbhome_1/network/admin/listener.ora
+Log messages written to /opt/oracle/diag/tnslsnr/oracle19c/listener/alert/log.xml
+Listening on: (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=oracle19c)(PORT=1521)))
+Listening on: (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=EXTPROC1521)))
+
+Connecting to (DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=oracle19c)(PORT=1521)))
+STATUS of the LISTENER
+------------------------
+Alias                     LISTENER
+Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+Start Date                17-NOV-2024 12:47:23
+Uptime                    0 days 0 hr. 0 min. 0 sec
+Trace Level               off
+Security                  ON: Local OS Authentication
+SNMP                      OFF
+Listener Parameter File   /opt/oracle/product/19c/dbhome_1/network/admin/listener.ora
+Listener Log File         /opt/oracle/diag/tnslsnr/oracle19c/listener/alert/log.xml
+Listening Endpoints Summary...
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=oracle19c)(PORT=1521)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=EXTPROC1521)))
+Services Summary...
+Service "PSQLORCL" has 1 instance(s).
+  Instance "PSQLORCL", status UNKNOWN, has 1 handler(s) for this service...
+The command completed successfully
+```
+
+En Oracle, un Database Link permite que una base de datos se comunique con otra, ya sea dentro del mismo sistema Oracle o con bases de datos externas, como PostgreSQL. Para crear un Database Link, es necesario que el usuario tenga privilegios adecuados. En mi caso tengo un usuario llamado "pablolink" al que le he otorgado permisos para que pueda crear un *Database Link*:
+
+```
+oracle@oracle19c:~$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Nov 17 12:59:14 2024
+Version 19.3.0.0.0
+
+Copyright (c) 1982, 2019, Oracle.  All rights reserved.
+
+
+Conectado a:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.3.0.0.0
+
+SQL> GRANT CREATE DATABASE LINK TO pablolink;
+
+Concesion terminada correctamente.
+
+SQL> exit
+Desconectado de Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.3.0.0.0
+```
+
+Una vez tenemos los permisos para el usuario "pablolink" ya podremos llevar a cabo la creación del enlace, para ello:
+
+```
+oracle@oracle19c:~$ sqlplus pablolink/password
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Nov 17 13:07:50 2024
+Version 19.3.0.0.0
+
+Copyright (c) 1982, 2019, Oracle.  All rights reserved.
+
+Hora de Ultima Conexion Correcta: Dom Nov 17 2024 13:06:55 +01:00
+
+Conectado a:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.3.0.0.0
+
+SQL> create database link kk
+  2  connect to "pablo" identified by "pablo"
+  3  using 'PSQLORCL';
+
+Enlace con la base de datos creado.
+```
+
+Donde:
+
+- `CREATE DATABASE LINK`: Especificamos un nombre identificativo para el enlace.
+- `CONNECT TO`: Indicamos las credenciales de acceso a la base de datos remota.
+- `USING`: Indicamos el nombre del alias de la conexión que previamente hemos definido en el fichero tnsnames.ora.
+
+Una vez creado el enlace, probamos a realizar una consulta que nos muestre los datos de la tabla `asistencias` del servidor PostgreSQL:
+```
+SQL> SELECT * FROM "asistencias"@kk;
+
+asistencia_id empleado_id fecha    hora_entrada
+------------- ----------- -------- ---------------------------------------------
+hora_salida
+---------------------------------------------
+	    1		1 10/11/24 08:00:00
+17:00:00
+
+	    2		2 10/11/24 08:30:00
+16:30:00
+
+	    3		3 10/11/24 09:00:00
+18:00:00
+
+
+asistencia_id empleado_id fecha    hora_entrada
+------------- ----------- -------- ---------------------------------------------
+hora_salida
+---------------------------------------------
+	    4		4 10/11/24 08:15:00
+17:15:00
+
+	    5		5 10/11/24 08:45:00
+16:45:00
+```
+
+¡Y listo! ya hemos interconectado Oracle 19c con PostgreSQL.
