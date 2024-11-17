@@ -12,3 +12,13 @@ Los enlaces que configuraremos son los siguientes:
 4. **Oracle** <------> **PostgreSQL**: Enlace bidireccional entre Oracle y PostgreSQL.
 
 Finalmente, realizaremos una consulta que integre información de dos servidores diferentes, aplicando enlaces simultáneos, para demostrar cómo combinar datos desde distintas bases de datos en una sola operación. Esto permitirá comprender la utilidad de los enlaces de bases de datos para gestionar datos distribuidos.
+
+## **Índice**
+
+1. [Interconexión entre servidores Oracle](Oracle-Oracle.md)
+
+2. [Interconexión entre servidores PostgreSQL](Postgre-Postgre.md)  
+
+3. [Interconexión entre Oracle y PostgreSQL](Oracle-Postgre.md)   
+
+--- 
