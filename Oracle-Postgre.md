@@ -83,7 +83,7 @@ El siguiente paso será crear un **DSN (Nombre de Fuente de Datos)** en el archi
 
 ```
 pablo@oracle19c:~$ cat /etc/odbc.ini 
-[PSQLORCL]
+[PSQLU]
 Debug           = 0
 CommLog         = 0
 ReadOnly        = 0
