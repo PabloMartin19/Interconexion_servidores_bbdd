@@ -205,24 +205,24 @@ SQL>
 
 ---
 
-## 3. **Creación de un usuario (RAUL)**
+## 3. **Creación de un usuario (PAVLO)**
 
-### Paso 1: Crear el usuario **RAUL**
+### Paso 1: Crear el usuario **PAVLO**
 
-Ejecuté los siguientes comandos para crear el usuario **RAUL** y asiKKarle permisos:
+Ejecuté los siguientes comandos para crear el usuario **PAVLO** y asiKKarle permisos:
 
 ```sql
-CREATE USER RAUL IDENTIFIED BY password;
-GRANT CONNECT, RESOURCE TO RAUL;
+CREATE USER PAVLO IDENTIFIED BY password;
+GRANT CONNECT, RESOURCE TO PAVLO;
 ```
 
 ### Paso 2: Comprobar la creación del usuario
 
-Verifiqué que el usuario **RAUL** se hubiera creado correctamente:
+Verifiqué que el usuario **PAVLO** se hubiera creado correctamente:
 
 ```sql
-SELECT USERNAME FROM DBA_USERS WHERE USERNAME = 'RAUL';
-RAUL
+SELECT USERNAME FROM DBA_USERS WHERE USERNAME = 'PAVLO';
+PAVLO
 ```
 
 ---
@@ -273,19 +273,19 @@ def get_connection(username, password):
 Por si lo necesito. para dar todos los permisos:
 
 ```
-SQL> GRANT DBA TO RAUL;
+SQL> GRANT DBA TO PAVLO;
 
 Concesion terminada correctamente.
 
-SQL> GRANT ALL PRIVILEGES TO RAUL;
+SQL> GRANT ALL PRIVILEGES TO PAVLO;
 
 Concesion terminada correctamente.
 ```
 
-Y para conectarme con el usuario Raul y ver en que instancia y usuario estoy:
+Y para conectarme con el usuario PAVLO y ver en que instancia y usuario estoy:
 
 ```
-(myenv) pablo@cliente-oracle:~/app_oracle2$ sqlplus raul/raulpassword@//192.168.122.195:1521/KK
+(myenv) pablo@cliente-oracle:~/app_oracle2$ sqlplus PAVLO/PAVLOpassword@//192.168.122.195:1521/KK
 
 SQL*Plus: Release 21.0.0.0.0 - Production on Mon Nov 18 00:22:49 2024
 Version 21.15.0.0.0
@@ -314,13 +314,33 @@ service_names			     string	 KK
 
 ---
 
-2. Para este ejercicio necesitarás tener en una BD ORACLE llamada GN, en el esquema RAUL la tabla profesores antes creada y en una BD MySQL llamada GN2 en otra máquina la siguiente tabla Asignaturas:
+```sql
+sudo -u postgres psql
+CREATE DATABASE GN2;
+CREATE USER pavlo WITH PASSWORD 'pavlo';
+GRANT ALL PRIVILEGES ON DATABASE GN2 TO pavlo;
+GRANT CREATE ON SCHEMA public TO pavlo;
+```
 
-| Nombre | DNI Profesor |
----------------------------
-| ASO | 28888888 |
-| ABD | 27777777 |
+Nos conectamos:
+```sql
+postgres@servidor-postgre1:~$ psql -U pavlo -d gn2 -h localhost
+Contraseña para usuario raul: 
+psql (15.9 (Debian 15.9-0+deb12u1))
+Conexión SSL (protocolo: TLSv1.3, cifrado: TLS_AES_256_GCM_SHA384, compresión: desactivado)
+Digite «help» para obtener ayuda.
 
-a) Debes realizar una consulta desde un cliente ORACLE que muestre el nombre de las asignaturas y el del profesor que las imparte usando una interconexión entre ambos servidores. (2 puntos)
+gn2=>
+```
+Crear las bases de datos:
+```sql
+CREATE TABLE Asignaturas (
+    Nombre VARCHAR(100),
+    DNI_Profesor VARCHAR(8)
+);
 
-b) Debes realizar una consulta desde un cliente MySQL que muestre el nombre de las asignaturas y el del profesor que las imparte usando una interconexión entre ambos servidores. (2 puntos)
+INSERT INTO Asignaturas (Nombre, DNI_Profesor)
+VALUES
+    ('ASO', '28888888'),
+    ('ABD', '27777777');
+```
